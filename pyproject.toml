@@ -1,0 +1,21 @@
+[project]
+name = "hyprfocus"
+version = "0.1.0"
+description = "Headless MediaPipe sleep-state detector for Raspberry Pi Camera"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mediapipe>=0.10.14",
+    "numpy>=1.26",
+    "opencv-python>=4.9",
+]
+
+[project.scripts]
+hyprfocus = "hyprfocus.app:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

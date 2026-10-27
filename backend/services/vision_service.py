@@ -13,6 +13,11 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
+DROWSY_ALERT_MESSAGE = "Estás somnoliento, ¡ten cuidado! No te vayas a dormir."
+SLEEPING_ALERT_MESSAGE = (
+    "¡Hey! ¡Despierta! Solo un poco de esfuerzo más para lograr tu objetivo."
+)
+
 class VisionService:
     def __init__(
         self,
@@ -44,8 +49,9 @@ class VisionService:
         self._previous_closed_fist: bool = False
 
         # Alertas automáticas de somnolencia
-        self.last_drowsy_alert_time: float = 0.0
+        self.last_sleep_alert_times: Dict[str, float] = {}
         self.alert_cooldown_seconds: float = 25.0
+        self._previous_sleep_state: str = "NO_FACE"
 
         # Simulación manual (para pruebas o desarrollo sin cámara física)
         self.simulated_fist: bool = False
@@ -205,6 +211,7 @@ class VisionService:
         self.is_running = False
         self._ready_event.clear()
         self._previous_closed_fist = False
+        self._previous_sleep_state = "NO_FACE"
         logger.info("Módulo de Visión hyprfocus detenido.")
 
     def _read_output_loop(self):
@@ -255,17 +262,28 @@ class VisionService:
                             )
                 self._previous_closed_fist = self.closed_fist
 
-                # Detección de Somnolencia / Sueño
-                if self.state in ("DROWSY", "SLEEPING"):
-                    if now - self.last_drowsy_alert_time > self.alert_cooldown_seconds:
-                        self.last_drowsy_alert_time = now
-                        desc = f"Se detectó somnolencia en el estudiante (ojos cerrados durante {self.eyes_closed_seconds} segundos)."
-                        logger.warning(f"⚠️ Alerta de visión: {desc}")
-                        if self.on_vision_alert_callback:
-                            try:
-                                self.on_vision_alert_callback(desc)
-                            except Exception as alert_err:
-                                logger.error(f"Error despachando alerta de visión: {alert_err}")
+                # Detección de Somnolencia / Sueño. Cada estado tiene su propio
+                # cooldown para que DROWSY no bloquee la alerta de SLEEPING.
+                alert_messages = {
+                    "DROWSY": DROWSY_ALERT_MESSAGE,
+                    "SLEEPING": SLEEPING_ALERT_MESSAGE,
+                }
+                entered_new_sleep_state = self.state != self._previous_sleep_state
+                last_alert_time = self.last_sleep_alert_times.get(self.state, 0.0)
+                if (
+                    self.state in alert_messages
+                    and entered_new_sleep_state
+                    and now - last_alert_time > self.alert_cooldown_seconds
+                ):
+                    self.last_sleep_alert_times[self.state] = now
+                    message = alert_messages[self.state]
+                    logger.warning("⚠️ Alerta de visión (%s): %s", self.state, message)
+                    if self.on_vision_alert_callback:
+                        try:
+                            self.on_vision_alert_callback(message)
+                        except Exception as alert_err:
+                            logger.error(f"Error despachando alerta de visión: {alert_err}")
+                self._previous_sleep_state = self.state
 
             except json.JSONDecodeError:
                 continue
@@ -275,6 +293,7 @@ class VisionService:
         self.is_running = False
         self._ready_event.clear()
         self._previous_closed_fist = False
+        self._previous_sleep_state = "NO_FACE"
 
     def _read_stderr_loop(self):
         """Drain and expose MediaPipe, Picamera2 and child-process errors."""

@@ -72,11 +72,13 @@ def handle_vision_alert(alert_description: str):
 
 async def trigger_automatic_vision_alert(alert_text: str):
     cmd_id = f"CMD_VIS_{uuid.uuid4().hex[:4].upper()}"
-    command_json = openai_service.interpret_user_command(
-        user_message="Alerta de visión computacional",
-        command_id=cmd_id,
-        vision_event=alert_text
-    )
+    # Las alertas automáticas ya contienen el mensaje final. Evitar una llamada
+    # al modelo garantiza que Piper pronuncie exactamente el texto configurado.
+    command_json = {
+        "ID_comando": cmd_id,
+        "Comando": "Alerta",
+        "Mensaje para el usuario": alert_text,
+    }
     result = await command_executor.execute(command_json)
     audio_file_path = result.get("audio_local_path")
     if audio_file_path and os.path.exists(audio_file_path):

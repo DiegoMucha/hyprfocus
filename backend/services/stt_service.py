@@ -90,12 +90,30 @@ class STTService:
                 text=True,
                 timeout=45
             )
+            if result.returncode != 0:
+                details = " ".join(result.stderr.split())[-1200:]
+                message = (
+                    f"whisper-cli terminó con código {result.returncode}: "
+                    f"{details or 'sin detalles en stderr'}"
+                )
+                logger.error(message)
+                return f"Error: {message}"
             raw_text = result.stdout.strip()
             # Limpiar líneas de logs de whisper.cpp (e.g. system_info, whisper_print_timings)
             lines = [line.strip() for line in raw_text.splitlines() if line.strip() and not line.startswith("whisper_") and not line.startswith("system_info")]
             transcribed = " ".join(lines).strip()
+            if not transcribed:
+                logger.warning(
+                    "whisper-cli terminó correctamente pero no detectó texto; "
+                    "revisa el nivel RMS/pico registrado justo antes de esta línea"
+                )
             logger.info(f"Transcripción obtenida: '{transcribed}'")
             return transcribed
-        except Exception as e:
-            logger.error(f"Error ejecutando whisper-cli: {e}")
-            return ""
+        except subprocess.TimeoutExpired:
+            message = "whisper-cli excedió el tiempo máximo de 45 segundos"
+            logger.error(message)
+            return f"Error: {message}"
+        except Exception as exc:
+            message = f"no se pudo ejecutar whisper-cli: {exc}"
+            logger.exception(message)
+            return f"Error: {message}"

@@ -87,17 +87,18 @@ class TTSService:
 
     def play_audio_locally(self, audio_path: str):
         """
-        Reproduce un archivo WAV en la salida de audio de la Raspberry Pi usando aplay o paplay.
+        Reproduce un archivo WAV en la salida de audio de la Raspberry Pi.
+        Prioriza PipeWire para respetar la salida predeterminada, incluido Bluetooth.
         Se ejecuta en segundo plano para no bloquear.
         """
         try:
-            if shutil.which("aplay"):
-                subprocess.Popen(["aplay", "-q", audio_path])
+            if shutil.which("pw-play"):
+                subprocess.Popen(["pw-play", audio_path])
             elif shutil.which("paplay"):
                 subprocess.Popen(["paplay", audio_path])
-            elif shutil.which("pw-play"):
-                subprocess.Popen(["pw-play", audio_path])
+            elif shutil.which("aplay"):
+                subprocess.Popen(["aplay", "-q", audio_path])
             else:
-                logger.info(f"No se encontro reproductor nativo (aplay/paplay) para: {audio_path}")
+                logger.info(f"No se encontro reproductor nativo (pw-play/paplay/aplay) para: {audio_path}")
         except Exception as err:
             logger.warning(f"No se pudo reproducir audio en la salida local: {err}")

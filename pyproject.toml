@@ -1,17 +1,25 @@
 [project]
 name = "hyprfocus"
-version = "0.1.0"
-description = "Headless MediaPipe sleep-state detector for Raspberry Pi Camera"
+version = "0.2.0"
+description = "Headless MediaPipe sleep-state detector, closed-fist gate and Hyper Assistant Backend for Raspberry Pi"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mediapipe>=0.10.14",
     "numpy>=1.26",
     "opencv-python>=4.9",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.6",
+    "pypdfium2>=4.20.0",
+    "requests>=2.31.0",
 ]
 
 [project.scripts]
 hyprfocus = "hyprfocus.app:main"
+hyprfocus-server = "server:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

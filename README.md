@@ -69,8 +69,11 @@ FIST_TRIGGER_COOLDOWN=2.0
 VISION_STARTUP_TIMEOUT=30.0
 ```
 
-List available ALSA devices with `arecord -L`. Runtime state and errors are
-available from `GET /api/vision/status` under `voice_capture` and `last_error`.
+List physical capture devices with `arecord -l`. The recorder first tries
+`MICROPHONE_DEVICE`, then automatically tries every physical device as
+`plughw:<card>,<device>`. Set the value explicitly if needed, for example
+`MICROPHONE_DEVICE=plughw:2,0`. Runtime state and errors are available from
+`GET /api/vision/status` under `voice_capture` and `last_error`.
 
 Useful calibration options:
 

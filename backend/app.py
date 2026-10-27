@@ -112,6 +112,7 @@ async def capture_fist_voice_command():
                 recording,
                 Config.MICROPHONE_RECORD_SECONDS,
             )
+            voice_capture_state["microphone_device"] = microphone_service.device
             voice_capture_state["status"] = "transcribing"
             transcription = await asyncio.to_thread(stt_service.transcribe, str(recording))
             if not transcription or transcription.startswith("Error:"):

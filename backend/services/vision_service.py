@@ -234,7 +234,6 @@ class VisionService:
                 now = time.time()
                 if self.closed_fist:
                     self.last_fist_detected_time = now
-                    logger.info(f"✊ Puño cerrado detectado ({self.closed_fist_hand}, score={self.closed_fist_score}). Micrófono activado.")
 
                 is_new_fist = self.closed_fist and not self._previous_closed_fist
                 cooldown_passed = (
@@ -242,6 +241,11 @@ class VisionService:
                 )
                 if is_new_fist and cooldown_passed:
                     self.last_fist_trigger_time = now
+                    logger.info(
+                        "✊ Nuevo puño cerrado (%s, score=%s). Activando micrófono.",
+                        self.closed_fist_hand,
+                        self.closed_fist_score,
+                    )
                     if self.on_closed_fist_callback:
                         try:
                             self.on_closed_fist_callback()

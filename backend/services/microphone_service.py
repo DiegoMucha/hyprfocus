@@ -1,5 +1,6 @@
 import logging
 import math
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,35 +25,69 @@ class MicrophoneService:
             )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        command = [
-            arecord,
-            "-q",
-            "-D",
-            self.device,
-            "-f",
-            "S16_LE",
-            "-r",
-            "16000",
-            "-c",
-            "1",
-            "-d",
-            str(max(1, math.ceil(duration_seconds))),
-            str(output_path),
-        ]
-        logger.info(
-            "Grabando micrófono ALSA '%s' durante %.1f segundos",
-            self.device,
-            duration_seconds,
+        errors: list[str] = []
+        for device in self._candidate_devices(arecord):
+            output_path.unlink(missing_ok=True)
+            command = [
+                arecord,
+                "-q",
+                "-D",
+                device,
+                "-f",
+                "S16_LE",
+                "-r",
+                "16000",
+                "-c",
+                "1",
+                "-d",
+                str(max(1, math.ceil(duration_seconds))),
+                str(output_path),
+            ]
+            logger.info(
+                "Grabando micrófono ALSA '%s' durante %.1f segundos",
+                device,
+                duration_seconds,
+            )
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(5.0, duration_seconds + 5.0),
+            )
+            if (
+                result.returncode == 0
+                and output_path.exists()
+                and output_path.stat().st_size > 44
+            ):
+                if device != self.device:
+                    logger.info("Micrófono ALSA seleccionado automáticamente: %s", device)
+                    self.device = device
+                return output_path
+            errors.append(f"{device}: {result.stderr.strip() or 'sin audio'}")
+
+        details = " | ".join(errors) or "arecord no encontró dispositivos de captura"
+        raise RuntimeError(
+            f"No se pudo abrir un micrófono ALSA. {details}. "
+            "Ejecuta 'arecord -l' y configura MICROPHONE_DEVICE=plughw:CARD,DEVICE."
         )
-        result = subprocess.run(
-            command,
-            stdout=subprocess.DEVNULL,
+
+    def _candidate_devices(self, arecord: str) -> list[str]:
+        """Return configured device followed by physical ALSA capture devices."""
+        candidates = [self.device]
+        listing = subprocess.run(
+            [arecord, "-l"],
+            stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=max(5.0, duration_seconds + 5.0),
+            timeout=5,
         )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "arecord terminó con error")
-        if not output_path.exists() or output_path.stat().st_size <= 44:
-            raise RuntimeError("El micrófono no produjo audio")
-        return output_path
+        for card, device in re.findall(
+            r"card\s+(\d+):.*?device\s+(\d+):",
+            listing.stdout,
+            flags=re.IGNORECASE,
+        ):
+            candidate = f"plughw:{card},{device}"
+            if candidate not in candidates:
+                candidates.append(candidate)
+        return candidates

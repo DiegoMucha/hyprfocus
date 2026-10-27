@@ -1,7 +1,7 @@
 # Hyprfocus
 
-Headless sleep-state detection for Raspberry Pi 5 using a Raspberry Pi Camera,
-MediaPipe Face Landmarker, and sustained eye closure.
+Headless sleep-state and closed-fist detection for Raspberry Pi 5 using a
+Raspberry Pi Camera, MediaPipe Face Landmarker, and Gesture Recognizer.
 
 This is an attention heuristic, not a medical sleep detector. A missing or
 occluded face is reported as `NO_FACE`, never as sleeping.
@@ -21,17 +21,19 @@ sudo apt update
 sudo apt install -y python3-picamera2 python3-venv
 ```
 
-From this repository, create an environment that can see the system Picamera2
-package and install the project:
+From this repository, create a uv environment with Raspberry Pi OS's system
+Python. Using `/usr/bin/python3` is important because Picamera2 is installed for
+that interpreter:
 
 ```bash
-python3 -m venv --system-site-packages .venv
+uv venv --clear --python /usr/bin/python3 --system-site-packages
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
+uv sync --active --python /usr/bin/python3
+python -c "from picamera2 import Picamera2; print('Picamera2 OK')"
 ```
 
-The model is expected at `./face_landmarker.task`, as included in this repo.
+The models are expected at `./face_landmarker.task` and
+`./gesture_recognizer.task`, as included in this repo.
 
 ## Run
 
@@ -42,9 +44,8 @@ hyprfocus
 The program runs without a desktop and emits JSON status lines:
 
 ```json
-{"state": "AWAKE", "sleeping": false, "ear": 0.284, "eyes_closed_seconds": 0.0}
-{"state": "DROWSY", "sleeping": false, "ear": 0.142, "eyes_closed_seconds": 1.04}
-{"state": "SLEEPING", "sleeping": true, "ear": 0.139, "eyes_closed_seconds": 3.07}
+{"state": "AWAKE", "sleeping": false, "ear": 0.284, "eyes_closed_seconds": 0.0, "closed_fist": false, "closed_fist_score": null, "closed_fist_hand": null}
+{"state": "SLEEPING", "sleeping": true, "ear": 0.139, "eyes_closed_seconds": 3.07, "closed_fist": true, "closed_fist_score": 0.91, "closed_fist_hand": "Left"}
 ```
 
 Stop it with `Ctrl+C`.
@@ -59,6 +60,13 @@ Watch the `ear` value with your eyes naturally open and closed. Set
 `--closed-threshold` between those values. Larger thresholds classify eyes as
 closed more readily. Glasses, camera angle, lighting, and distance affect the
 measurement.
+
+Only MediaPipe's `Closed_Fist` category is enabled and exposed. Adjust its
+minimum confidence if needed:
+
+```bash
+hyprfocus --gesture-threshold 0.70
+```
 
 For development with a USB webcam instead of Picamera2:
 

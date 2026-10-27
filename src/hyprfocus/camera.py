@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import os
+from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
@@ -26,11 +29,24 @@ class PiCamera(Camera):
     def __init__(self, width: int, height: int, fps: int) -> None:
         try:
             from picamera2 import Picamera2
-        except ImportError as exc:
-            raise RuntimeError(
-                "Picamera2 is unavailable. Install it with: "
-                "sudo apt install python3-picamera2"
-            ) from exc
+        except ImportError:
+            system_packages = Path(
+                os.getenv(
+                    "HYPRFOCUS_SYSTEM_PYTHON_PACKAGES",
+                    "/usr/lib/python3/dist-packages",
+                )
+            )
+            if system_packages.is_dir() and str(system_packages) not in sys.path:
+                # Append rather than prepend: uv's MediaPipe/NumPy stay authoritative.
+                sys.path.append(str(system_packages))
+            try:
+                from picamera2 import Picamera2
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Picamera2 is unavailable to this Python interpreter. Install it "
+                    "with 'sudo apt install python3-picamera2' and create the virtual "
+                    "environment with '--system-site-packages'."
+                ) from exc
 
         self._camera = Picamera2()
         config = self._camera.create_video_configuration(

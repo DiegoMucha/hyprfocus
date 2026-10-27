@@ -64,6 +64,9 @@ class Config:
     HYPRFOCUS_GESTURE_MODEL = os.getenv("HYPRFOCUS_GESTURE_MODEL", str(HYPRFOCUS_ROOT / "gesture_recognizer.task"))
     HYPRFOCUS_CAMERA = os.getenv("HYPRFOCUS_CAMERA", "picamera2")
     HYPRFOCUS_DEVICE = int(os.getenv("HYPRFOCUS_DEVICE", "0"))
+    SYSTEM_PYTHON_DIST_PACKAGES = Path(
+        os.getenv("SYSTEM_PYTHON_DIST_PACKAGES", "/usr/lib/python3/dist-packages")
+    )
     REQUIRE_CLOSED_FIST = os.getenv("REQUIRE_CLOSED_FIST", "true").lower() in ("1", "true", "yes")
     FIST_ACTIVATION_TIMEOUT = float(os.getenv("FIST_ACTIVATION_TIMEOUT", "8.0"))
     FIST_TRIGGER_COOLDOWN = float(os.getenv("FIST_TRIGGER_COOLDOWN", "2.0"))

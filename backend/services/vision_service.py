@@ -146,7 +146,14 @@ class VisionService:
         # Añadir la carpeta src de hyprfocus al PYTHONPATH
         env = os.environ.copy()
         src_path = str(Config.HYPRFOCUS_DIR / "src")
-        env["PYTHONPATH"] = f"{src_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        python_paths = [src_path]
+        existing_pythonpath = env.get("PYTHONPATH")
+        if existing_pythonpath:
+            python_paths.append(existing_pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(python_paths)
+        env["HYPRFOCUS_SYSTEM_PYTHON_PACKAGES"] = str(
+            Config.SYSTEM_PYTHON_DIST_PACKAGES
+        )
 
         try:
             self.process = subprocess.Popen(

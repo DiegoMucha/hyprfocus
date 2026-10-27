@@ -62,6 +62,7 @@ Configure the microphone in `backend/.env`:
 
 ```env
 AUTO_START_VISION=true
+SYSTEM_PYTHON_DIST_PACKAGES=/usr/lib/python3/dist-packages
 MICROPHONE_DEVICE=default
 MICROPHONE_RECORD_SECONDS=5.0
 FIST_TRIGGER_COOLDOWN=2.0

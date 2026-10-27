@@ -12,9 +12,11 @@ load_dotenv(HYPRFOCUS_ROOT / ".env")
 load_dotenv(WORKSPACE_ROOT / ".env")
 
 class Config:
-    # Google Gemini
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    # OpenAI Responses API
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna")
+    OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "45.0"))
+    OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "1"))
 
     # Local STT (whisper.cpp)
     # Por defecto busca en la ruta de la Pi o local

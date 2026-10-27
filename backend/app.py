@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from config import Config
-from services.gemini_service import GeminiService
+from services.openai_service import OpenAIService
 from services.tts_service import TTSService
 from services.stt_service import STTService
 from services.document_service import DocumentService
@@ -27,7 +27,7 @@ logger = logging.getLogger("HyperBackend")
 
 app = FastAPI(
     title="Hyper Assistant Backend",
-    description="Backend para Raspberry Pi: Whisper STT, Piper TTS, Gemini 3.8 Flash, Visión Hyprfocus y Ejecución de Comandos",
+    description="Backend para Raspberry Pi: Whisper STT, Piper TTS, OpenAI, Visión Hyprfocus y Ejecución de Comandos",
     version="1.1.0"
 )
 
@@ -41,12 +41,12 @@ app.add_middleware(
 )
 
 # Inicializar servicios
-gemini_service = GeminiService()
+openai_service = OpenAIService()
 tts_service = TTSService()
 stt_service = STTService()
 document_service = DocumentService()
 music_service = MusicService()
-command_executor = CommandExecutor(gemini_service, tts_service, music_service, document_service)
+command_executor = CommandExecutor(openai_service, tts_service, music_service, document_service)
 microphone_service = MicrophoneService()
 
 # Cache de archivos de audio generados para streaming
@@ -72,7 +72,7 @@ def handle_vision_alert(alert_description: str):
 
 async def trigger_automatic_vision_alert(alert_text: str):
     cmd_id = f"CMD_VIS_{uuid.uuid4().hex[:4].upper()}"
-    command_json = gemini_service.interpret_user_command(
+    command_json = openai_service.interpret_user_command(
         user_message="Alerta de visión computacional",
         command_id=cmd_id,
         vision_event=alert_text
@@ -126,7 +126,7 @@ async def capture_fist_voice_command():
                 f"Archivo activo: {active_doc['filename']}" if active_doc else None
             )
             command_json = await asyncio.to_thread(
-                gemini_service.interpret_user_command,
+                openai_service.interpret_user_command,
                 user_message=transcription,
                 command_id=cmd_id,
                 active_commands=command_executor.get_active_commands_list(),
@@ -187,7 +187,7 @@ def read_root():
     return {
         "status": "online",
         "system": "Hyper Voice & Study Assistant",
-        "model": Config.GEMINI_MODEL,
+        "model": Config.OPENAI_MODEL,
         "active_document": document_service.get_active_document()["filename"] if document_service.get_active_document() else None,
         "active_commands_count": len(command_executor.active_commands),
         "vision_running": vision_service.is_running,
@@ -198,7 +198,7 @@ def read_root():
 async def process_chat_message(request: ChatRequest):
     """
     Procesa un mensaje de texto del usuario.
-    Ejecuta el reconocimiento de intención con Gemini y activa la función correspondiente.
+    Ejecuta el reconocimiento de intención con OpenAI y activa la función correspondiente.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío.")
@@ -207,8 +207,8 @@ async def process_chat_message(request: ChatRequest):
     active_doc = document_service.get_active_document()
     doc_context = f"Archivo activo: {active_doc['filename']} (longitud: {active_doc['text_length']} caracteres)" if active_doc else None
 
-    # Interpretar con Gemini
-    command_json = gemini_service.interpret_user_command(
+    # Interpretar con OpenAI
+    command_json = openai_service.interpret_user_command(
         user_message=request.message,
         command_id=cmd_id,
         active_commands=command_executor.get_active_commands_list(),
@@ -287,7 +287,7 @@ async def process_voice_audio(file: UploadFile = File(...)):
         active_doc = document_service.get_active_document()
         doc_context = f"Archivo activo: {active_doc['filename']}" if active_doc else None
 
-        command_json = gemini_service.interpret_user_command(
+        command_json = openai_service.interpret_user_command(
             user_message=transcription,
             command_id=cmd_id,
             active_commands=command_executor.get_active_commands_list(),
@@ -353,7 +353,7 @@ async def process_vision_event(req: VisionEventRequest):
     Tiene máxima prioridad según funcionalidades.md.
     """
     cmd_id = f"CMD_VIS_{uuid.uuid4().hex[:4].upper()}"
-    command_json = gemini_service.interpret_user_command(
+    command_json = openai_service.interpret_user_command(
         user_message="Alerta de visión computacional",
         command_id=cmd_id,
         vision_event=req.event

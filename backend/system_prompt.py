@@ -136,7 +136,7 @@ def build_hyper_prompt(
     vision_event: str = None
 ) -> str:
     """
-    Construye la entrada contextual para Gemini asegurando que cumpla
+    Construye la entrada contextual para el modelo asegurando que cumpla
     las reglas de entrada de funcionalidades.md
     """
     parts = []

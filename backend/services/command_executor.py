@@ -5,7 +5,7 @@ import time
 from typing import Dict, Any, List, Optional
 from services.tts_service import TTSService
 from services.music_service import MusicService
-from services.gemini_service import GeminiService
+from services.openai_service import OpenAIService
 from services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 class CommandExecutor:
     def __init__(
         self,
-        gemini_service: GeminiService,
+        openai_service: OpenAIService,
         tts_service: TTSService,
         music_service: MusicService,
         document_service: DocumentService
     ):
-        self.gemini_service = gemini_service
+        self.openai_service = openai_service
         self.tts_service = tts_service
         self.music_service = music_service
         self.document_service = document_service
@@ -34,7 +34,7 @@ class CommandExecutor:
         self._timer_tasks: Dict[str, asyncio.Task] = {}
 
     def get_active_commands_list(self) -> List[Dict[str, Any]]:
-        """Devuelve la lista simplificada de comandos activos para alimentar a Gemini"""
+        """Devuelve comandos activos para alimentar al modelo de OpenAI."""
         active = []
         for cmd_id, data in self.active_commands.items():
             active.append({
@@ -134,7 +134,7 @@ class CommandExecutor:
             self.pending_clarification = None
 
         elif cmd_type == "Resumen":
-            # Generar el resumen de contenido con Gemini
+            # Generar el resumen de contenido con OpenAI
             requested_text = command_json.get("Texto", "")
             instructions = command_json.get("Instrucciones")
 
@@ -144,7 +144,7 @@ class CommandExecutor:
             if active_doc and (not requested_text or "documento" in requested_text.lower() or len(requested_text) < 30):
                 text_to_summarize = active_doc["content"]
 
-            full_summary = self.gemini_service.generate_full_summary(text_to_summarize, instructions)
+            full_summary = self.openai_service.generate_full_summary(text_to_summarize, instructions)
             self.latest_summary = {
                 "id": cmd_id,
                 "tema": requested_text or (active_doc["filename"] if active_doc else "General"),
@@ -162,7 +162,7 @@ class CommandExecutor:
             if active_doc and (not topic or "documento" in topic.lower()):
                 topic_or_context = f"{topic} basado en el archivo: {active_doc['content'][:8000]}"
 
-            flashcards_list = self.gemini_service.generate_flashcards_content(topic_or_context, count)
+            flashcards_list = self.openai_service.generate_flashcards_content(topic_or_context, count)
             self.latest_flashcards = {
                 "id": cmd_id,
                 "tema": topic,

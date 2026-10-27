@@ -75,6 +75,16 @@ List physical capture devices with `arecord -l`. The recorder first tries
 `MICROPHONE_DEVICE=plughw:2,0`. Runtime state and errors are available from
 `GET /api/vision/status` under `voice_capture` and `last_error`.
 
+The backend uses the OpenAI Responses API for command interpretation. Add your
+key to `backend/.env` (this file is ignored by Git):
+
+```env
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-6-luna
+OPENAI_TIMEOUT_SECONDS=45
+OPENAI_MAX_RETRIES=1
+```
+
 Useful calibration options:
 
 ```bash

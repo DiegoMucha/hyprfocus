@@ -29,9 +29,15 @@ class OpenAIService:
                 "OPENAI_API_KEY no está configurada. Defínela en backend/.env."
             )
 
+        request_input = prompt
+        if as_json:
+            request_input = (
+                "Return the response as a valid JSON object.\n\n" + prompt
+            )
+
         body: Dict[str, Any] = {
             "model": self.model,
-            "input": prompt,
+            "input": request_input,
         }
         if system_instruction:
             body["instructions"] = system_instruction

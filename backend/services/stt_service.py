@@ -10,9 +10,26 @@ logger = logging.getLogger(__name__)
 
 class STTService:
     def __init__(self, cli_path: Optional[str] = None, model_path: Optional[str] = None, threads: int = 4):
-        self.cli_path = cli_path or Config.WHISPER_CLI_PATH
-        self.model_path = model_path or Config.WHISPER_MODEL_PATH
+        self.cli_path = self._resolve_cli(cli_path or Config.WHISPER_CLI_PATH)
+        self.model_path = self._resolve_model(model_path or Config.WHISPER_MODEL_PATH)
         self.threads = threads or Config.WHISPER_THREADS
+
+    @staticmethod
+    def _resolve_cli(configured_path: str) -> str:
+        candidates = [Path(configured_path), Path(Config.DEFAULT_WHISPER_CLI)]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+        global_cli = shutil.which("whisper-cli")
+        return global_cli or configured_path
+
+    @staticmethod
+    def _resolve_model(configured_path: str) -> str:
+        candidates = [Path(configured_path), Path(Config.DEFAULT_WHISPER_MODEL)]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+        return configured_path
 
     def convert_to_wav(self, input_path: str) -> str:
         """
@@ -51,6 +68,9 @@ class STTService:
                 self.cli_path = "whisper-cli"
             else:
                 return "Error: whisper-cli no está instalado o configurado en la Raspberry Pi."
+
+        if not os.path.isfile(self.model_path):
+            return f"Error: modelo Whisper no encontrado en {self.model_path}"
 
         # Ejecutar whisper.cpp cli
         cmd = [

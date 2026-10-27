@@ -19,6 +19,7 @@ from services.document_service import DocumentService
 from services.music_service import MusicService
 from services.command_executor import CommandExecutor
 from services.vision_service import VisionService
+from services.microphone_service import MicrophoneService
 
 # Configuración de logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -46,9 +47,20 @@ stt_service = STTService()
 document_service = DocumentService()
 music_service = MusicService()
 command_executor = CommandExecutor(gemini_service, tts_service, music_service, document_service)
+microphone_service = MicrophoneService()
 
 # Cache de archivos de audio generados para streaming
 audio_cache: Dict[str, str] = {}
+voice_capture_state: Dict[str, Any] = {
+    "status": "idle",
+    "last_transcription": None,
+    "last_error": None,
+    "last_result": None,
+    "microphone_device": microphone_service.device,
+    "whisper_cli": stt_service.cli_path,
+    "whisper_model": stt_service.model_path,
+}
+voice_capture_lock: Optional[asyncio.Lock] = None
 
 def handle_vision_alert(alert_description: str):
     """Callback invocado por VisionService cuando hyprfocus detecta somnolencia/ojos cerrados"""
@@ -71,17 +83,90 @@ async def trigger_automatic_vision_alert(alert_text: str):
         audio_id = f"{cmd_id}.wav"
         audio_cache[audio_id] = audio_file_path
 
+
+def handle_closed_fist():
+    """Called by VisionService's reader thread on a new Closed_Fist edge."""
+    if main_event_loop is None or main_event_loop.is_closed():
+        logger.error("No hay event loop disponible para activar el micrófono")
+        return
+    asyncio.run_coroutine_threadsafe(capture_fist_voice_command(), main_event_loop)
+
+
+async def capture_fist_voice_command():
+    """Record and execute one local voice command after a fist trigger."""
+    global voice_capture_lock
+    if voice_capture_lock is None:
+        voice_capture_lock = asyncio.Lock()
+    if voice_capture_lock.locked():
+        logger.info("Se ignoró el gesto: ya hay una captura de voz en progreso")
+        return
+
+    async with voice_capture_lock:
+        voice_capture_state.update(
+            status="recording", last_error=None, last_transcription=None
+        )
+        recording = Config.AUDIO_OUTPUT_DIR / "temp" / f"fist_{uuid.uuid4().hex[:8]}.wav"
+        try:
+            await asyncio.to_thread(
+                microphone_service.record,
+                recording,
+                Config.MICROPHONE_RECORD_SECONDS,
+            )
+            voice_capture_state["status"] = "transcribing"
+            transcription = await asyncio.to_thread(stt_service.transcribe, str(recording))
+            if not transcription or transcription.startswith("Error:"):
+                raise RuntimeError(transcription or "Whisper no detectó voz")
+
+            voice_capture_state["last_transcription"] = transcription
+            voice_capture_state["status"] = "executing"
+            cmd_id = f"CMD_FIST_{uuid.uuid4().hex[:4].upper()}"
+            active_doc = document_service.get_active_document()
+            doc_context = (
+                f"Archivo activo: {active_doc['filename']}" if active_doc else None
+            )
+            command_json = await asyncio.to_thread(
+                gemini_service.interpret_user_command,
+                user_message=transcription,
+                command_id=cmd_id,
+                active_commands=command_executor.get_active_commands_list(),
+                music_catalog=music_service.get_catalog(),
+                pending_clarification=command_executor.pending_clarification,
+                document_context=doc_context,
+            )
+            result = await command_executor.execute(command_json)
+            voice_capture_state["last_result"] = result
+
+            audio_file_path = result.get("audio_local_path")
+            if audio_file_path and os.path.exists(audio_file_path):
+                audio_cache[f"{cmd_id}.wav"] = audio_file_path
+            voice_capture_state["status"] = "idle"
+            logger.info("Comando por puño ejecutado: %s", transcription)
+        except Exception as exc:
+            voice_capture_state.update(status="error", last_error=str(exc))
+            logger.exception("Falló la captura de voz activada por puño")
+        finally:
+            try:
+                recording.unlink(missing_ok=True)
+            except Exception:
+                pass
+
 # Servicio de visión (Hyprfocus: MediaPipe Face Landmarker + Gesture Recognizer)
-vision_service = VisionService(on_vision_alert_callback=handle_vision_alert)
+vision_service = VisionService(
+    on_vision_alert_callback=handle_vision_alert,
+    on_closed_fist_callback=handle_closed_fist,
+)
 
 main_event_loop = None
 
 @app.on_event("startup")
 async def startup_event():
-    global main_event_loop
+    global main_event_loop, voice_capture_lock
     main_event_loop = asyncio.get_running_loop()
+    voice_capture_lock = asyncio.Lock()
     if Config.AUTO_START_VISION:
-        vision_service.start()
+        started = await asyncio.to_thread(vision_service.start)
+        if not started:
+            logger.error("El backend inició, pero el servicio de visión no está listo")
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -237,7 +322,10 @@ async def process_voice_audio(file: UploadFile = File(...)):
 @app.get("/api/vision/status")
 def get_vision_status():
     """Devuelve el estado en tiempo real de la cámara, somnolencia y puño cerrado"""
-    return vision_service.get_status()
+    return {
+        **vision_service.get_status(),
+        "voice_capture": dict(voice_capture_state),
+    }
 
 @app.post("/api/vision/start")
 def start_vision():

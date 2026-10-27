@@ -19,6 +19,7 @@ Install Picamera2 and environment tools:
 ```bash
 sudo apt update
 sudo apt install -y python3-picamera2 python3-venv
+sudo apt install -y alsa-utils
 ```
 
 From this repository, create a uv environment with Raspberry Pi OS's system
@@ -49,6 +50,26 @@ The program runs without a desktop and emits JSON status lines:
 ```
 
 Stop it with `Ctrl+C`.
+
+## Backend: fist-activated voice
+
+When the backend runs on the Pi, vision starts automatically. A new closed-fist
+detection records five seconds from the local ALSA microphone, transcribes the
+WAV with Whisper, interprets it, and executes the resulting command. Holding a
+fist triggers only once; lower the hand and make a new fist to trigger again.
+
+Configure the microphone in `backend/.env`:
+
+```env
+AUTO_START_VISION=true
+MICROPHONE_DEVICE=default
+MICROPHONE_RECORD_SECONDS=5.0
+FIST_TRIGGER_COOLDOWN=2.0
+VISION_STARTUP_TIMEOUT=30.0
+```
+
+List available ALSA devices with `arecord -L`. Runtime state and errors are
+available from `GET /api/vision/status` under `voice_capture` and `last_error`.
 
 Useful calibration options:
 

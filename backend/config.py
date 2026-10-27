@@ -18,10 +18,19 @@ class Config:
 
     # Local STT (whisper.cpp)
     # Por defecto busca en la ruta de la Pi o local
-    DEFAULT_WHISPER_CLI = WORKSPACE_ROOT / "whisper.cpp" / "build" / "bin" / "whisper-cli"
-    WHISPER_CLI_PATH = os.getenv("WHISPER_CLI_PATH", str(DEFAULT_WHISPER_CLI if DEFAULT_WHISPER_CLI.exists() else "/home/juanjose/whisper.cpp/build/bin/whisper-cli"))
-    DEFAULT_WHISPER_MODEL = WORKSPACE_ROOT / "whisper.cpp" / "models" / "ggml-base.bin"
-    WHISPER_MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", str(DEFAULT_WHISPER_MODEL if DEFAULT_WHISPER_MODEL.exists() else "/home/juanjose/whisper.cpp/models/ggml-base.bin"))
+    WHISPER_ROOT_CANDIDATES = [
+        HYPRFOCUS_ROOT / "whisper.cpp",
+        WORKSPACE_ROOT / "whisper.cpp",
+        Path("/home/juanjose/whisper.cpp"),
+    ]
+    WHISPER_ROOT = next(
+        (path for path in WHISPER_ROOT_CANDIDATES if path.exists()),
+        WHISPER_ROOT_CANDIDATES[0],
+    )
+    DEFAULT_WHISPER_CLI = WHISPER_ROOT / "build" / "bin" / "whisper-cli"
+    WHISPER_CLI_PATH = os.getenv("WHISPER_CLI_PATH", str(DEFAULT_WHISPER_CLI))
+    DEFAULT_WHISPER_MODEL = WHISPER_ROOT / "models" / "ggml-base.bin"
+    WHISPER_MODEL_PATH = os.getenv("WHISPER_MODEL_PATH", str(DEFAULT_WHISPER_MODEL))
     WHISPER_THREADS = int(os.getenv("WHISPER_THREADS", "4"))
 
     # Local TTS (Piper)
@@ -57,7 +66,13 @@ class Config:
     HYPRFOCUS_DEVICE = int(os.getenv("HYPRFOCUS_DEVICE", "0"))
     REQUIRE_CLOSED_FIST = os.getenv("REQUIRE_CLOSED_FIST", "true").lower() in ("1", "true", "yes")
     FIST_ACTIVATION_TIMEOUT = float(os.getenv("FIST_ACTIVATION_TIMEOUT", "8.0"))
-    AUTO_START_VISION = os.getenv("AUTO_START_VISION", "false").lower() in ("1", "true", "yes")
+    FIST_TRIGGER_COOLDOWN = float(os.getenv("FIST_TRIGGER_COOLDOWN", "2.0"))
+    AUTO_START_VISION = os.getenv("AUTO_START_VISION", "true").lower() in ("1", "true", "yes")
+    VISION_STARTUP_TIMEOUT = float(os.getenv("VISION_STARTUP_TIMEOUT", "30.0"))
+
+    # Captura local del micrófono activada por el gesto Closed_Fist
+    MICROPHONE_DEVICE = os.getenv("MICROPHONE_DEVICE", "default")
+    MICROPHONE_RECORD_SECONDS = float(os.getenv("MICROPHONE_RECORD_SECONDS", "5.0"))
 
 # Crear directorios necesarios
 Config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)

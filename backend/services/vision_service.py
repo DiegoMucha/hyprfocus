@@ -14,13 +14,22 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class VisionService:
-    def __init__(self, on_vision_alert_callback: Optional[Callable[[str], Any]] = None):
+    def __init__(
+        self,
+        on_vision_alert_callback: Optional[Callable[[str], Any]] = None,
+        on_closed_fist_callback: Optional[Callable[[], Any]] = None,
+    ):
         self.on_vision_alert_callback = on_vision_alert_callback
+        self.on_closed_fist_callback = on_closed_fist_callback
 
         # Estado del detector
         self.is_running: bool = False
         self.process: Optional[subprocess.Popen] = None
         self._reader_thread: Optional[threading.Thread] = None
+        self._stderr_thread: Optional[threading.Thread] = None
+        self._ready_event = threading.Event()
+        self.last_error: Optional[str] = None
+        self.last_stderr: Optional[str] = None
 
         # Datos en tiempo real
         self.state: str = "NO_FACE"
@@ -31,6 +40,8 @@ class VisionService:
         self.closed_fist_score: Optional[float] = None
         self.closed_fist_hand: Optional[str] = None
         self.last_fist_detected_time: float = 0.0
+        self.last_fist_trigger_time: float = 0.0
+        self._previous_closed_fist: bool = False
 
         # Alertas automáticas de somnolencia
         self.last_drowsy_alert_time: float = 0.0
@@ -75,12 +86,23 @@ class VisionService:
         self.simulated_fist = True
         self.simulated_fist_time = time.time()
         logger.info(f"Puño cerrado simulado activado por {duration_seconds}s")
+        if self.on_closed_fist_callback:
+            self.on_closed_fist_callback()
+        timer = threading.Timer(duration_seconds, self._clear_simulated_fist)
+        timer.daemon = True
+        timer.start()
+
+    def _clear_simulated_fist(self):
+        self.simulated_fist = False
 
     def get_status(self) -> Dict[str, Any]:
         """Retorna el estado actual de visión y autorización de voz"""
         auth_info = self.is_voice_authorized()
         return {
             "is_running": self.is_running,
+            "ready": self._ready_event.is_set(),
+            "last_error": self.last_error,
+            "last_stderr": self.last_stderr,
             "state": self.state,
             "sleeping": self.sleeping,
             "ear": self.ear,
@@ -92,10 +114,16 @@ class VisionService:
             "authorization_details": auth_info
         }
 
-    def start(self) -> bool:
+    def start(self, startup_timeout: Optional[float] = None) -> bool:
         """Inicia el proceso de detección de hyprfocus"""
         if self.is_running:
             return True
+
+        self._ready_event.clear()
+        self.last_error = None
+        self.last_stderr = None
+        if startup_timeout is None:
+            startup_timeout = Config.VISION_STARTUP_TIMEOUT
 
         face_task = Path(Config.HYPRFOCUS_FACE_MODEL)
         gesture_task = Path(Config.HYPRFOCUS_GESTURE_MODEL)
@@ -132,8 +160,23 @@ class VisionService:
             )
             self.is_running = True
             self._reader_thread = threading.Thread(target=self._read_output_loop, daemon=True)
+            self._stderr_thread = threading.Thread(target=self._read_stderr_loop, daemon=True)
             self._reader_thread.start()
-            logger.info("Módulo de Visión hyprfocus iniciado con éxito.")
+            self._stderr_thread.start()
+
+            if not self._ready_event.wait(timeout=startup_timeout):
+                return_code = self.process.poll()
+                reason = self.last_error or (
+                    f"hyprfocus terminó con código {return_code}"
+                    if return_code is not None
+                    else "hyprfocus no produjo datos dentro del tiempo esperado"
+                )
+                logger.error("No se pudo iniciar visión: %s", reason)
+                self.stop()
+                self.last_error = reason
+                return False
+
+            logger.info("Módulo de Visión hyprfocus listo y produciendo datos.")
             return True
         except Exception as e:
             logger.error(f"Error al iniciar hyprfocus: {e}")
@@ -153,6 +196,8 @@ class VisionService:
                     pass
             self.process = None
         self.is_running = False
+        self._ready_event.clear()
+        self._previous_closed_fist = False
         logger.info("Módulo de Visión hyprfocus detenido.")
 
     def _read_output_loop(self):
@@ -167,6 +212,7 @@ class VisionService:
 
             try:
                 data = json.loads(line_str)
+                self._ready_event.set()
                 self.state = data.get("state", "NO_FACE")
                 self.sleeping = data.get("sleeping", False)
                 self.ear = data.get("ear")
@@ -182,6 +228,21 @@ class VisionService:
                 if self.closed_fist:
                     self.last_fist_detected_time = now
                     logger.info(f"✊ Puño cerrado detectado ({self.closed_fist_hand}, score={self.closed_fist_score}). Micrófono activado.")
+
+                is_new_fist = self.closed_fist and not self._previous_closed_fist
+                cooldown_passed = (
+                    now - self.last_fist_trigger_time >= Config.FIST_TRIGGER_COOLDOWN
+                )
+                if is_new_fist and cooldown_passed:
+                    self.last_fist_trigger_time = now
+                    if self.on_closed_fist_callback:
+                        try:
+                            self.on_closed_fist_callback()
+                        except Exception as fist_err:
+                            logger.error(
+                                "Error despachando activación por puño: %s", fist_err
+                            )
+                self._previous_closed_fist = self.closed_fist
 
                 # Detección de Somnolencia / Sueño
                 if self.state in ("DROWSY", "SLEEPING"):
@@ -201,3 +262,31 @@ class VisionService:
                 logger.error(f"Error procesando frame de visión: {e}")
 
         self.is_running = False
+        self._ready_event.clear()
+        self._previous_closed_fist = False
+
+    def _read_stderr_loop(self):
+        """Drain and expose MediaPipe, Picamera2 and child-process errors."""
+        if not self.process or not self.process.stderr:
+            return
+
+        for line in self.process.stderr:
+            message = line.strip()
+            if not message:
+                continue
+            self.last_stderr = message
+            is_error = any(
+                marker in message
+                for marker in (
+                    "ERROR",
+                    "Traceback",
+                    "RuntimeError",
+                    "ModuleNotFoundError",
+                    "FileNotFoundError",
+                )
+            )
+            if is_error:
+                self.last_error = message
+                logger.error("hyprfocus stderr: %s", message)
+            else:
+                logger.debug("hyprfocus stderr: %s", message)

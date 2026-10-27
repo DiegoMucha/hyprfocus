@@ -46,3 +46,4 @@ htmlcov/
 *.avi
 *.mkv
 
+whisper.cpp

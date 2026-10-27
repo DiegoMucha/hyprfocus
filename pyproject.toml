@@ -19,7 +19,7 @@ dependencies = [
 
 [project.scripts]
 hyprfocus = "hyprfocus.app:main"
-hyprfocus-server = "server:main"
+hyprfocus-server = "hyprfocus.server:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
